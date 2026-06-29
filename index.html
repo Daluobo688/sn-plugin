@@ -19,9 +19,7 @@
         .btn-success { background: #34c759; color: white; }
         .btn-success:hover { background: #2db84e; }
         .btn-warning { background: #ff9500; color: white; }
-        .btn-warning:hover { background: #e68600; }
         .btn-danger { background: #ff3b30; color: white; }
-        .btn-danger:hover { background: #e6342a; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .status { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
         .status-matched { background: #d4edda; color: #155724; }
@@ -42,16 +40,23 @@
         .project-detail { font-size: 12px; color: #666; margin-top: 4px; }
         .project-actions { display: flex; gap: 8px; }
         .btn-sm { padding: 5px 10px; font-size: 11px; }
+        .input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
+        .sn-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin: 2px; font-family: monospace; }
+        .sn-matched { background: #d4edda; color: #155724; }
+        .sn-missing { background: #ffebee; color: #c62828; }
+        .sn-extra { background: #fff3cd; color: #856404; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>SN管理面板</h1>
-            <p>飞书多维表格插件 - SN匹配检查与数据管理</p>
+            <p>浏览器插件版 - 直接查询EAM系统</p>
         </div>
 
-        <!-- 状态卡片 -->
+        <!-- 数据概览 -->
         <div class="card">
             <h3>📊 数据概览</h3>
             <div id="overview" class="loading">加载中...</div>
@@ -70,29 +75,20 @@
         <!-- 结果展示 -->
         <div id="result-area"></div>
 
-        <!-- EAM登录 -->
-        <div class="card">
-            <h3>🔐 EAM登录</h3>
-            <p style="color: #666; font-size: 13px; margin-bottom: 12px;">登录EAM系统以进行SN匹配查询</p>
-            <div id="login-status" style="margin-bottom: 12px;"></div>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; font-size: 13px; color: #666; margin-bottom: 4px;">EAM账号</label>
-                <input type="text" id="eam-user" class="input" placeholder="请输入EAM账号" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
-            </div>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; font-size: 13px; color: #666; margin-bottom: 4px;">EAM密码</label>
-                <input type="password" id="eam-pass" class="input" placeholder="请输入EAM密码" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
-            </div>
-            <button class="btn btn-primary" onclick="loginEAM()">登录EAM</button>
-            <button class="btn btn-success" onclick="testEAMConnection()" style="margin-left: 8px;">测试连接</button>
-        </div>
-
         <!-- 配置 -->
         <div class="card">
-            <h3>⚙️ 后端配置</h3>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; font-size: 13px; color: #666; margin-bottom: 4px;">后端服务地址</label>
-                <input type="text" id="server-url" class="input" placeholder="http://localhost:80" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
+            <h3>⚙️ 多维表格配置</h3>
+            <div class="form-group">
+                <label>App Token</label>
+                <input type="text" id="app-token" class="input" placeholder="多维表格App Token">
+            </div>
+            <div class="form-group">
+                <label>汇总表 Table ID</label>
+                <input type="text" id="summary-table" class="input" placeholder="汇总表Table ID">
+            </div>
+            <div class="form-group">
+                <label>明细表配置（JSON格式）</label>
+                <textarea id="detail-tables" class="input" rows="4" placeholder='{"土耳其":"tblXXX","孟加拉":"tblXXX"}'></textarea>
             </div>
             <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
             <button class="btn btn-success" onclick="testConnection()" style="margin-left: 8px;">测试连接</button>
@@ -101,66 +97,27 @@
 
     <script>
         // 配置
-        let SERVER_URL = localStorage.getItem('sn_server_url') || 'http://localhost:80';
-        document.getElementById('server-url').value = SERVER_URL;
+        let config = JSON.parse(localStorage.getItem('sn_config') || '{}');
+        document.getElementById('app-token').value = config.app_token || '';
+        document.getElementById('summary-table').value = config.summary_table || '';
+        document.getElementById('detail-tables').value = config.detail_tables ? JSON.stringify(config.detail_tables) : '';
 
         function saveConfig() {
-            SERVER_URL = document.getElementById('server-url').value;
-            localStorage.setItem('sn_server_url', SERVER_URL);
+            config = {
+                app_token: document.getElementById('app-token').value.trim(),
+                summary_table: document.getElementById('summary-table').value.trim(),
+                detail_tables: JSON.parse(document.getElementById('detail-tables').value || '{}')
+            };
+            localStorage.setItem('sn_config', JSON.stringify(config));
             toast('配置已保存', 'success');
         }
 
-        // EAM登录
-        async function loginEAM() {
-            var userCode = document.getElementById('eam-user').value.trim();
-            var password = document.getElementById('eam-pass').value.trim();
-            if (!userCode || !password) {
-                toast('请输入EAM账号和密码', 'error');
-                return;
-            }
-            document.getElementById('login-status').innerHTML = '<div class="loading">登录中，请稍候...</div>';
-            try {
-                const resp = await fetch(SERVER_URL + '/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_code: userCode, password: password })
-                });
-                const data = await resp.json();
-                if (data.ok) {
-                    localStorage.setItem('eam_user', userCode);
-                    document.getElementById('login-status').innerHTML = '<div class="success">✅ 登录成功！账号：' + userCode + '</div>';
-                    toast('EAM登录成功', 'success');
-                } else {
-                    document.getElementById('login-status').innerHTML = '<div class="error">❌ ' + (data.message || '登录失败') + '</div>';
-                    toast('EAM登录失败', 'error');
-                }
-            } catch (e) {
-                document.getElementById('login-status').innerHTML = '<div class="error">❌ 连接失败：' + e.message + '</div>';
-                toast('连接失败', 'error');
-            }
-        }
-
-        function testEAMConnection() {
-            var userCode = localStorage.getItem('eam_user');
-            if (!userCode) {
-                toast('请先登录EAM', 'error');
-                return;
-            }
-            toast('EAM连接正常，账号：' + userCode, 'success');
-        }
-
-        // 初始化登录状态
-        function initLoginStatus() {
-            var user = localStorage.getItem('eam_user');
-            if (user) {
-                document.getElementById('login-status').innerHTML = '<div class="success">✅ 已登录，账号：' + user + '</div>';
-                document.getElementById('eam-user').value = user;
-            }
-        }
-
         async function testConnection() {
+            if (!config.app_token) { toast('请先填写App Token', 'error'); return; }
             try {
-                const resp = await fetch(SERVER_URL + '/api/health', { method: 'GET' });
+                const resp = await fetch(`https://open.feishu.cn/open-apis/bitable/v1/apps/${config.app_token}/tables`, {
+                    headers: { 'Authorization': 'Bearer ' + await getFeishuToken() }
+                });
                 if (resp.ok) {
                     toast('连接成功！', 'success');
                 } else {
@@ -171,31 +128,67 @@
             }
         }
 
+        // 获取飞书Token
+        async function getFeishuToken() {
+            // 从本地存储获取或使用测试token
+            return localStorage.getItem('feishu_token') || '';
+        }
+
         // 加载数据概览
         async function loadOverview() {
+            if (!config.app_token || !config.summary_table) {
+                document.getElementById('overview').innerHTML = '<div class="error">请先配置多维表格信息</div>';
+                return;
+            }
             try {
-                const resp = await fetch(SERVER_URL + '/api/overview');
+                const token = await getFeishuToken();
+                const resp = await fetch(`https://open.feishu.cn/open-apis/bitable/v1/apps/${config.app_token}/tables/${config.summary_table}/records?page_size=100`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
                 const data = await resp.json();
-                document.getElementById('overview').innerHTML = `
-                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                        <div style="text-align: center; flex: 1; min-width: 100px;">
-                            <div style="font-size: 24px; font-weight: 700; color: #3370ff;">${data.total || 0}</div>
-                            <div style="font-size: 12px; color: #666;">项目总数</div>
+                if (data.code === 0) {
+                    const records = data.data.items || [];
+                    let total = records.length;
+                    let matched = 0, pending = 0, overdue = 0;
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+
+                    records.forEach(r => {
+                        const fields = r.fields || {};
+                        const status = fields['SN匹配状态'] ? (Array.isArray(fields['SN匹配状态']) ? fields['SN匹配状态'][0] : fields['SN匹配状态']) : '';
+                        if (status === '已匹配') matched++;
+                        else if (status === '待匹配') pending++;
+
+                        const eta = fields['ETA时间'];
+                        if (eta) {
+                            const etaDate = new Date(eta);
+                            if (etaDate < today && status !== '已匹配') overdue++;
+                        }
+                    });
+
+                    document.getElementById('overview').innerHTML = `
+                        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                            <div style="text-align: center; flex: 1; min-width: 100px;">
+                                <div style="font-size: 24px; font-weight: 700; color: #3370ff;">${total}</div>
+                                <div style="font-size: 12px; color: #666;">项目总数</div>
+                            </div>
+                            <div style="text-align: center; flex: 1; min-width: 100px;">
+                                <div style="font-size: 24px; font-weight: 700; color: #34c759;">${matched}</div>
+                                <div style="font-size: 12px; color: #666;">已匹配</div>
+                            </div>
+                            <div style="text-align: center; flex: 1; min-width: 100px;">
+                                <div style="font-size: 24px; font-weight: 700; color: #ff9500;">${pending}</div>
+                                <div style="font-size: 12px; color: #666;">待匹配</div>
+                            </div>
+                            <div style="text-align: center; flex: 1; min-width: 100px;">
+                                <div style="font-size: 24px; font-weight: 700; color: #ff3b30;">${overdue}</div>
+                                <div style="font-size: 12px; color: #666;">已逾期</div>
+                            </div>
                         </div>
-                        <div style="text-align: center; flex: 1; min-width: 100px;">
-                            <div style="font-size: 24px; font-weight: 700; color: #34c759;">${data.matched || 0}</div>
-                            <div style="font-size: 12px; color: #666;">已匹配</div>
-                        </div>
-                        <div style="text-align: center; flex: 1; min-width: 100px;">
-                            <div style="font-size: 24px; font-weight: 700; color: #ff9500;">${data.pending || 0}</div>
-                            <div style="font-size: 12px; color: #666;">待匹配</div>
-                        </div>
-                        <div style="text-align: center; flex: 1; min-width: 100px;">
-                            <div style="font-size: 24px; font-weight: 700; color: #ff3b30;">${data.overdue || 0}</div>
-                            <div style="font-size: 12px; color: #666;">已逾期</div>
-                        </div>
-                    </div>
-                `;
+                    `;
+                } else {
+                    document.getElementById('overview').innerHTML = '<div class="error">加载失败：' + (data.msg || '未知错误') + '</div>';
+                }
             } catch (e) {
                 document.getElementById('overview').innerHTML = '<div class="error">加载失败：' + e.message + '</div>';
             }
@@ -203,34 +196,51 @@
 
         // 加载项目列表
         async function loadProjects() {
+            if (!config.app_token || !config.summary_table) {
+                document.getElementById('project-list').innerHTML = '<div class="error">请先配置多维表格信息</div>';
+                return;
+            }
             try {
-                const resp = await fetch(SERVER_URL + '/api/projects');
+                const token = await getFeishuToken();
+                const resp = await fetch(`https://open.feishu.cn/open-apis/bitable/v1/apps/${config.app_token}/tables/${config.summary_table}/records?page_size=100`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
                 const data = await resp.json();
-                if (data.projects && data.projects.length > 0) {
-                    let html = '';
-                    data.projects.forEach(p => {
-                        let statusClass = 'status-unchecked';
-                        let statusText = '未检查';
-                        if (p.status === '已匹配') { statusClass = 'status-matched'; statusText = '已匹配'; }
-                        else if (p.status === '待匹配') { statusClass = 'status-pending'; statusText = '待匹配'; }
+                if (data.code === 0) {
+                    const records = data.data.items || [];
+                    if (records.length > 0) {
+                        let html = '';
+                        records.forEach(r => {
+                            const fields = r.fields || {};
+                            const name = fields['项目代号'] ? (Array.isArray(fields['项目代号']) ? fields['项目代号'][0] : fields['项目代号']) : '未知';
+                            const country = fields['本地产国家'] ? (Array.isArray(fields['本地产国家']) ? fields['本地产国家'][0] : fields['本地产国家']) : '未分配';
+                            const status = fields['SN匹配状态'] ? (Array.isArray(fields['SN匹配状态']) ? fields['SN匹配状态'][0] : fields['SN匹配状态']) : '未检查';
+                            const snCount = fields['SN匹配数'] || 0;
 
-                        html += `
-                            <div class="project-item">
-                                <div class="project-info">
-                                    <div class="project-name">${p.name}</div>
-                                    <div class="project-detail">${p.country} | ${p.person || '未分配'} | SN数: ${p.sn_count || 0}</div>
+                            let statusClass = 'status-unchecked';
+                            let statusText = '未检查';
+                            if (status === '已匹配') { statusClass = 'status-matched'; statusText = '已匹配'; }
+                            else if (status === '待匹配') { statusClass = 'status-pending'; statusText = '待匹配'; }
+
+                            html += `
+                                <div class="project-item">
+                                    <div class="project-info">
+                                        <div class="project-name">${name}</div>
+                                        <div class="project-detail">${country} | SN数: ${snCount}</div>
+                                    </div>
+                                    <span class="status ${statusClass}">${statusText}</span>
+                                    <div class="project-actions">
+                                        <button class="btn btn-primary btn-sm" onclick="checkProject('${r.record_id}')">检查</button>
+                                    </div>
                                 </div>
-                                <span class="status ${statusClass}">${statusText}</span>
-                                <div class="project-actions">
-                                    <button class="btn btn-primary btn-sm" onclick="checkProject('${p.id}')">检查</button>
-                                    <button class="btn btn-success btn-sm" onclick="viewDetail('${p.id}')">详情</button>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    document.getElementById('project-list').innerHTML = html;
+                            `;
+                        });
+                        document.getElementById('project-list').innerHTML = html;
+                    } else {
+                        document.getElementById('project-list').innerHTML = '<div class="loading">暂无项目数据</div>';
+                    }
                 } else {
-                    document.getElementById('project-list').innerHTML = '<div class="loading">暂无项目数据</div>';
+                    document.getElementById('project-list').innerHTML = '<div class="error">加载失败：' + (data.msg || '未知错误') + '</div>';
                 }
             } catch (e) {
                 document.getElementById('project-list').innerHTML = '<div class="error">加载失败：' + e.message + '</div>';
@@ -238,54 +248,130 @@
         }
 
         // 检查单个项目
-        async function checkProject(projectId) {
-            var userCode = localStorage.getItem('eam_user');
-            if (!userCode) {
-                showError('请先登录EAM系统');
-                return;
-            }
-            showLoading('正在检查SN匹配（使用账号：' + userCode + '）...');
+        async function checkProject(recordId) {
+            showLoading('正在检查SN匹配...');
             try {
-                const resp = await fetch(SERVER_URL + '/api/check/' + projectId + '?user_code=' + encodeURIComponent(userCode));
+                // 1. 从多维表格读取项目信息
+                const token = await getFeishuToken();
+                const resp = await fetch(`https://open.feishu.cn/open-apis/bitable/v1/apps/${config.app_token}/tables/${config.summary_table}/records/${recordId}`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
                 const data = await resp.json();
-                if (data.ok) {
-                    showResult('检查完成', data);
-                    loadProjects();
-                    loadOverview();
-                } else {
-                    showError(data.error || '检查失败');
+                if (data.code !== 0) { showError('读取项目失败'); return; }
+
+                const fields = data.data.record.fields;
+                const name = fields['项目代号'] ? (Array.isArray(fields['项目代号']) ? fields['项目代号'][0] : fields['项目代号']) : '';
+                const country = fields['本地产国家'] ? (Array.isArray(fields['本地产国家']) ? fields['本地产国家'][0] : fields['本地产国家']) : '';
+                const pAccount = fields['P账号挂账人'] ? (Array.isArray(fields['P账号挂账人']) ? fields['P账号挂账人'][0] : fields['P账号挂账人']) : '';
+                const userCode = pAccount ? (pAccount.email ? pAccount.email.split('@')[0] : pAccount.name || '') : '';
+
+                if (!userCode) { showError('无P账号'); return; }
+
+                // 2. 从EAM查询SN
+                const eamSns = await queryEAM(userCode, name);
+
+                // 3. 从明细表读取SN
+                const detailTableId = config.detail_tables[country];
+                let bitableSns = [];
+                if (detailTableId) {
+                    const detailResp = await fetch(`https://open.feishu.cn/open-apis/bitable/v1/apps/${config.app_token}/tables/${detailTableId}/records?page_size=200`, {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const detailData = await detailResp.json();
+                    if (detailData.code === 0) {
+                        bitableSns = (detailData.data.items || []).map(r => r.fields['SN']).filter(Boolean);
+                    }
                 }
+
+                // 4. 比对
+                const b = new Set(bitableSns);
+                const e = new Set(eamSns);
+                const missing = [...b].filter(x => !e.has(x)).sort();
+                const matched = [...b].filter(x => e.has(x)).sort();
+                const extra = [...e].filter(x => !b.has(x)).sort();
+                const newStatus = missing.length === 0 ? '已匹配' : '待匹配';
+
+                // 5. 回写到多维表格
+                await fetch(`https://open.feishu.cn/open-apis/bitable/v1/apps/${config.app_token}/tables/${config.summary_table}/records/${recordId}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fields: {
+                        'SN匹配状态': newStatus,
+                        'SN匹配数': matched.length,
+                        'EAM SN数': eamSns.length,
+                        '缺失SN数': missing.length
+                    }})
+                });
+
+                showResult('检查完成', {
+                    status: newStatus,
+                    matched: matched.length,
+                    missing: missing.length,
+                    total_bitable: bitableSns.length,
+                    total_eam: eamSns.length,
+                    missing_list: missing,
+                    matched_list: matched,
+                    extra_list: extra
+                });
+                loadProjects();
+                loadOverview();
             } catch (e) {
                 showError('检查失败：' + e.message);
+            }
+        }
+
+        // 查询EAM
+        async function queryEAM(userCode, projectCode) {
+            try {
+                const resp = await fetch(`https://eam.asset.mioffice.cn/jxs/common?eventcode=query_data&funid=queryevent pagetype=grid&query_funid=proto_card_user&user_id=${userCode}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: 'start=0&limit=50'
+                });
+                const data = await resp.json();
+                const items = (data.data && data.data.root) || [];
+                return items
+                    .filter(item => item.proto_card__device_code)
+                    .filter(item => !projectCode || item.proto_card__project_code === projectCode)
+                    .map(item => item.proto_card__device_code);
+            } catch (e) {
+                console.error('EAM查询失败:', e);
+                return [];
             }
         }
 
         // 批量检查
         async function checkAllProjects() {
-            var userCode = localStorage.getItem('eam_user');
-            if (!userCode) {
-                showError('请先登录EAM系统');
-                return;
-            }
-            showLoading('批量检查中（使用账号：' + userCode + '），请稍候...');
+            showLoading('批量检查中，请稍候...');
             try {
-                const resp = await fetch(SERVER_URL + '/api/check-all?user_code=' + encodeURIComponent(userCode));
+                const token = await getFeishuToken();
+                const resp = await fetch(`https://open.feishu.cn/open-apis/bitable/v1/apps/${config.app_token}/tables/${config.summary_table}/records?page_size=100`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
                 const data = await resp.json();
-                if (data.ok) {
-                    showResult('批量检查完成', { checked: data.checked });
-                    loadProjects();
-                    loadOverview();
-                } else {
-                    showError(data.error || '检查失败');
-                }
-            } catch (e) {
-                showError('检查失败：' + e.message);
-            }
-        }
+                if (data.code !== 0) { showError('加载项目失败'); return; }
 
-        // 查看详情
-        async function viewDetail(projectId) {
-            window.open(SERVER_URL + '/sn-detail/' + projectId, '_blank');
+                const records = data.data.items || [];
+                let checked = 0;
+                for (const r of records) {
+                    const fields = r.fields || {};
+                    const eta = fields['ETA时间'];
+                    if (!eta) continue;
+                    const etaDate = new Date(eta);
+                    const today = new Date();
+                    const diffDays = Math.floor((etaDate - today) / (1000 * 60 * 60 * 24));
+                    if (diffDays > 2) continue;
+
+                    await checkProject(r.record_id);
+                    checked++;
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+                showResult('批量检查完成', { checked: checked });
+                loadProjects();
+                loadOverview();
+            } catch (e) {
+                showError('批量检查失败：' + e.message);
+            }
         }
 
         // UI辅助函数
@@ -297,13 +383,18 @@
             if (data) {
                 html += '<div class="result-card">';
                 Object.keys(data).forEach(key => {
-                    if (key !== 'ok' && key !== 'missing_list' && key !== 'matched_list' && key !== 'extra_list') {
+                    if (key !== 'missing_list' && key !== 'matched_list' && key !== 'extra_list') {
                         html += '<div class="result-row"><span class="result-label">' + key + '</span><span class="result-value">' + data[key] + '</span></div>';
                     }
                 });
                 if (data.missing_list && data.missing_list.length > 0) {
                     html += '<div style="margin-top: 8px;"><strong>未匹配SN：</strong><br>';
-                    data.missing_list.forEach(sn => { html += '<span style="background:#ffebee;color:#c62828;padding:2px 8px;border-radius:4px;font-size:12px;margin:2px;display:inline-block;">' + sn + '</span>'; });
+                    data.missing_list.forEach(sn => { html += '<span class="sn-tag sn-missing">' + sn + '</span>'; });
+                    html += '</div>';
+                }
+                if (data.matched_list && data.matched_list.length > 0) {
+                    html += '<div style="margin-top: 8px;"><strong>已匹配SN：</strong><br>';
+                    data.matched_list.forEach(sn => { html += '<span class="sn-tag sn-matched">' + sn + '</span>'; });
                     html += '</div>';
                 }
                 html += '</div>';
@@ -323,7 +414,6 @@
         }
 
         // 初始化
-        initLoginStatus();
         loadOverview();
         loadProjects();
     </script>

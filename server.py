@@ -10,6 +10,18 @@ from datetime import datetime
 
 app = Flask(__name__)
 
+# CORS 支持
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
+
+@app.route('/api/<path:path>', methods=['OPTIONS'])
+def options_handler(path):
+    return '', 200
+
 # ============ 配置 ============
 APP_TOKEN = "LnP7bzkxbaP1sIsThMXc86hln95"
 SUMMARY_TABLE = "tbl13zwiSdsfAzX9"
