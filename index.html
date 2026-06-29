@@ -77,32 +77,89 @@
 
         <!-- 配置 -->
         <div class="card">
-            <h3>⚙️ 多维表格配置</h3>
+            <h3>⚙️ 配置</h3>
             <div class="form-group">
-                <label>App Token</label>
-                <input type="text" id="app-token" class="input" placeholder="多维表格App Token">
+                <label>飞书 Access Token（首次使用需要填写）</label>
+                <input type="password" id="feishu-token" class="input" placeholder="从飞书开放平台获取">
+                <div style="font-size:11px;color:#999;margin-top:4px;">获取方式：飞书开放平台 → 你的应用 → 凭证与基础信息 → App Access Token</div>
             </div>
             <div class="form-group">
-                <label>汇总表 Table ID</label>
-                <input type="text" id="summary-table" class="input" placeholder="汇总表Table ID">
+                <label>多维表格 App Token（从URL中复制）</label>
+                <input type="text" id="app-token" class="input" placeholder="粘贴多维表格URL或App Token">
+            </div>
+            <button class="btn btn-primary" onclick="detectTables()" style="margin-bottom: 12px;">自动检测表格</button>
+            <div id="table-list" style="margin-bottom: 12px;"></div>
+            <div class="form-group">
+                <label>汇总表</label>
+                <select id="summary-table" class="input"><option value="">-- 请先检测表格 --</option></select>
             </div>
             <div class="form-group">
-                <label>明细表配置（JSON格式）</label>
-                <textarea id="detail-tables" class="input" rows="4" placeholder='{"土耳其":"tblXXX","孟加拉":"tblXXX"}'></textarea>
+                <label>明细表配置（自动填充）</label>
+                <textarea id="detail-tables" class="input" rows="3" readonly></textarea>
             </div>
             <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
-            <button class="btn btn-success" onclick="testConnection()" style="margin-left: 8px;">测试连接</button>
         </div>
     </div>
 
     <script>
         // 配置
         let config = JSON.parse(localStorage.getItem('sn_config') || '{}');
+        document.getElementById('feishu-token').value = localStorage.getItem('feishu_token') || '';
         document.getElementById('app-token').value = config.app_token || '';
-        document.getElementById('summary-table').value = config.summary_table || '';
-        document.getElementById('detail-tables').value = config.detail_tables ? JSON.stringify(config.detail_tables) : '';
+        if (config.summary_table) {
+            document.getElementById('summary-table').value = config.summary_table;
+        }
+        if (config.detail_tables) {
+            document.getElementById('detail-tables').value = JSON.stringify(config.detail_tables);
+        }
+
+        // 自动检测表格
+        async function detectTables() {
+            var tokenInput = document.getElementById('app-token').value.trim();
+            // 从URL提取App Token
+            var match = tokenInput.match(/\/base\/([A-Za-z0-9]+)/);
+            if (match) tokenInput = match[1];
+            if (!tokenInput) { toast('请输入App Token或粘贴多维表格URL', 'error'); return; }
+
+            config.app_token = tokenInput;
+            document.getElementById('app-token').value = tokenInput;
+
+            try {
+                var feishuToken = await getFeishuToken();
+                if (!feishuToken) { toast('请先登录飞书获取Token', 'error'); return; }
+
+                var resp = await fetch('https://open.feishu.cn/open-apis/bitable/v1/apps/' + tokenInput + '/tables', {
+                    headers: { 'Authorization': 'Bearer ' + feishuToken }
+                });
+                var data = await resp.json();
+                if (data.code !== 0) { toast('获取表格失败：' + (data.msg || ''), 'error'); return; }
+
+                var tables = data.data.items || [];
+                var html = '<div style="font-size:13px;color:#666;margin-bottom:8px;">检测到 ' + tables.length + ' 个表格：</div>';
+                var selectHtml = '<option value="">-- 选择汇总表 --</option>';
+                var detailOptions = [];
+
+                tables.forEach(function(t) {
+                    selectHtml += '<option value="' + t.table_id + '">' + t.name + ' (' + t.table_id + ')</option>';
+                    detailOptions.push({ name: t.name, id: t.table_id });
+                });
+
+                document.getElementById('summary-table').innerHTML = selectHtml;
+                document.getElementById('detail-tables').value = JSON.stringify(detailOptions.reduce(function(acc, item) {
+                    acc[item.name] = item.id;
+                    return acc;
+                }, {}));
+
+                document.getElementById('table-list').innerHTML = html;
+                toast('检测到 ' + tables.length + ' 个表格', 'success');
+            } catch (e) {
+                toast('检测失败：' + e.message, 'error');
+            }
+        }
 
         function saveConfig() {
+            var feishuToken = document.getElementById('feishu-token').value.trim();
+            if (feishuToken) localStorage.setItem('feishu_token', feishuToken);
             config = {
                 app_token: document.getElementById('app-token').value.trim(),
                 summary_table: document.getElementById('summary-table').value.trim(),
@@ -130,7 +187,6 @@
 
         // 获取飞书Token
         async function getFeishuToken() {
-            // 从本地存储获取或使用测试token
             return localStorage.getItem('feishu_token') || '';
         }
 
