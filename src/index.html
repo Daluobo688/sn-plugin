@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SN管理面板</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #3370ff, #4facfe); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        .header h1 { font-size: 20px; margin-bottom: 5px; }
+        .header p { font-size: 13px; opacity: 0.8; }
+        .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        .card h3 { font-size: 15px; margin-bottom: 12px; color: #333; }
+        .btn { display: inline-block; padding: 8px 16px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+        .btn-primary { background: #3370ff; color: white; }
+        .btn-primary:hover { background: #2860d9; }
+        .btn-success { background: #34c759; color: white; }
+        .btn-success:hover { background: #2db84e; }
+        .btn-warning { background: #ff9500; color: white; }
+        .btn-warning:hover { background: #e68600; }
+        .btn-danger { background: #ff3b30; color: white; }
+        .btn-danger:hover { background: #e6342a; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .status-matched { background: #d4edda; color: #155724; }
+        .status-pending { background: #d1ecf1; color: #0c5460; }
+        .status-unchecked { background: #e9ecef; color: #495057; }
+        .result-card { background: #f8f9fa; border-radius: 8px; padding: 12px; margin-top: 12px; }
+        .result-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #eee; }
+        .result-row:last-child { border-bottom: none; }
+        .result-label { color: #666; font-size: 13px; }
+        .result-value { font-weight: 600; font-size: 13px; }
+        .loading { text-align: center; padding: 20px; color: #999; }
+        .error { background: #ffebee; color: #c62828; padding: 12px; border-radius: 8px; margin-top: 12px; }
+        .success { background: #e8f5e9; color: #2e7d32; padding: 12px; border-radius: 8px; margin-top: 12px; }
+        .project-list { margin-top: 12px; }
+        .project-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px; }
+        .project-info { flex: 1; }
+        .project-name { font-weight: 600; font-size: 14px; }
+        .project-detail { font-size: 12px; color: #666; margin-top: 4px; }
+        .project-actions { display: flex; gap: 8px; }
+        .btn-sm { padding: 5px 10px; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>SN管理面板</h1>
+            <p>飞书多维表格插件 - SN匹配检查与数据管理</p>
+        </div>
+
+        <!-- 状态卡片 -->
+        <div class="card">
+            <h3>📊 数据概览</h3>
+            <div id="overview" class="loading">加载中...</div>
+        </div>
+
+        <!-- SN匹配 -->
+        <div class="card">
+            <h3>🔍 SN匹配检查</h3>
+            <p style="color: #666; font-size: 13px; margin-bottom: 12px;">选择项目进行SN匹配检查，对比EAM系统数据</p>
+            <div id="project-list" class="project-list">加载中...</div>
+            <div style="margin-top: 12px;">
+                <button class="btn btn-primary" onclick="checkAllProjects()">批量检查所有</button>
+            </div>
+        </div>
+
+        <!-- 结果展示 -->
+        <div id="result-area"></div>
+
+        <!-- EAM登录 -->
+        <div class="card">
+            <h3>🔐 EAM登录</h3>
+            <p style="color: #666; font-size: 13px; margin-bottom: 12px;">登录EAM系统以进行SN匹配查询</p>
+            <div id="login-status" style="margin-bottom: 12px;"></div>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-size: 13px; color: #666; margin-bottom: 4px;">EAM账号</label>
+                <input type="text" id="eam-user" class="input" placeholder="请输入EAM账号" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-size: 13px; color: #666; margin-bottom: 4px;">EAM密码</label>
+                <input type="password" id="eam-pass" class="input" placeholder="请输入EAM密码" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
+            </div>
+            <button class="btn btn-primary" onclick="loginEAM()">登录EAM</button>
+            <button class="btn btn-success" onclick="testEAMConnection()" style="margin-left: 8px;">测试连接</button>
+        </div>
+
+        <!-- 配置 -->
+        <div class="card">
+            <h3>⚙️ 后端配置</h3>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-size: 13px; color: #666; margin-bottom: 4px;">后端服务地址</label>
+                <input type="text" id="server-url" class="input" placeholder="http://localhost:80" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
+            </div>
+            <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+            <button class="btn btn-success" onclick="testConnection()" style="margin-left: 8px;">测试连接</button>
+        </div>
+    </div>
+
+    <script>
+        // 配置
+        let SERVER_URL = localStorage.getItem('sn_server_url') || 'http://localhost:80';
+        document.getElementById('server-url').value = SERVER_URL;
+
+        function saveConfig() {
+            SERVER_URL = document.getElementById('server-url').value;
+            localStorage.setItem('sn_server_url', SERVER_URL);
+            toast('配置已保存', 'success');
+        }
+
+        // EAM登录
+        async function loginEAM() {
+            var userCode = document.getElementById('eam-user').value.trim();
+            var password = document.getElementById('eam-pass').value.trim();
+            if (!userCode || !password) {
+                toast('请输入EAM账号和密码', 'error');
+                return;
+            }
+            document.getElementById('login-status').innerHTML = '<div class="loading">登录中，请稍候...</div>';
+            try {
+                const resp = await fetch(SERVER_URL + '/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_code: userCode, password: password })
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    localStorage.setItem('eam_user', userCode);
+                    document.getElementById('login-status').innerHTML = '<div class="success">✅ 登录成功！账号：' + userCode + '</div>';
+                    toast('EAM登录成功', 'success');
+                } else {
+                    document.getElementById('login-status').innerHTML = '<div class="error">❌ ' + (data.message || '登录失败') + '</div>';
+                    toast('EAM登录失败', 'error');
+                }
+            } catch (e) {
+                document.getElementById('login-status').innerHTML = '<div class="error">❌ 连接失败：' + e.message + '</div>';
+                toast('连接失败', 'error');
+            }
+        }
+
+        function testEAMConnection() {
+            var userCode = localStorage.getItem('eam_user');
+            if (!userCode) {
+                toast('请先登录EAM', 'error');
+                return;
+            }
+            toast('EAM连接正常，账号：' + userCode, 'success');
+        }
+
+        // 初始化登录状态
+        function initLoginStatus() {
+            var user = localStorage.getItem('eam_user');
+            if (user) {
+                document.getElementById('login-status').innerHTML = '<div class="success">✅ 已登录，账号：' + user + '</div>';
+                document.getElementById('eam-user').value = user;
+            }
+        }
+
+        async function testConnection() {
+            try {
+                const resp = await fetch(SERVER_URL + '/api/health', { method: 'GET' });
+                if (resp.ok) {
+                    toast('连接成功！', 'success');
+                } else {
+                    toast('连接失败：' + resp.status, 'error');
+                }
+            } catch (e) {
+                toast('连接失败：' + e.message, 'error');
+            }
+        }
+
+        // 加载数据概览
+        async function loadOverview() {
+            try {
+                const resp = await fetch(SERVER_URL + '/api/overview');
+                const data = await resp.json();
+                document.getElementById('overview').innerHTML = `
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div style="text-align: center; flex: 1; min-width: 100px;">
+                            <div style="font-size: 24px; font-weight: 700; color: #3370ff;">${data.total || 0}</div>
+                            <div style="font-size: 12px; color: #666;">项目总数</div>
+                        </div>
+                        <div style="text-align: center; flex: 1; min-width: 100px;">
+                            <div style="font-size: 24px; font-weight: 700; color: #34c759;">${data.matched || 0}</div>
+                            <div style="font-size: 12px; color: #666;">已匹配</div>
+                        </div>
+                        <div style="text-align: center; flex: 1; min-width: 100px;">
+                            <div style="font-size: 24px; font-weight: 700; color: #ff9500;">${data.pending || 0}</div>
+                            <div style="font-size: 12px; color: #666;">待匹配</div>
+                        </div>
+                        <div style="text-align: center; flex: 1; min-width: 100px;">
+                            <div style="font-size: 24px; font-weight: 700; color: #ff3b30;">${data.overdue || 0}</div>
+                            <div style="font-size: 12px; color: #666;">已逾期</div>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                document.getElementById('overview').innerHTML = '<div class="error">加载失败：' + e.message + '</div>';
+            }
+        }
+
+        // 加载项目列表
+        async function loadProjects() {
+            try {
+                const resp = await fetch(SERVER_URL + '/api/projects');
+                const data = await resp.json();
+                if (data.projects && data.projects.length > 0) {
+                    let html = '';
+                    data.projects.forEach(p => {
+                        let statusClass = 'status-unchecked';
+                        let statusText = '未检查';
+                        if (p.status === '已匹配') { statusClass = 'status-matched'; statusText = '已匹配'; }
+                        else if (p.status === '待匹配') { statusClass = 'status-pending'; statusText = '待匹配'; }
+
+                        html += `
+                            <div class="project-item">
+                                <div class="project-info">
+                                    <div class="project-name">${p.name}</div>
+                                    <div class="project-detail">${p.country} | ${p.person || '未分配'} | SN数: ${p.sn_count || 0}</div>
+                                </div>
+                                <span class="status ${statusClass}">${statusText}</span>
+                                <div class="project-actions">
+                                    <button class="btn btn-primary btn-sm" onclick="checkProject('${p.id}')">检查</button>
+                                    <button class="btn btn-success btn-sm" onclick="viewDetail('${p.id}')">详情</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    document.getElementById('project-list').innerHTML = html;
+                } else {
+                    document.getElementById('project-list').innerHTML = '<div class="loading">暂无项目数据</div>';
+                }
+            } catch (e) {
+                document.getElementById('project-list').innerHTML = '<div class="error">加载失败：' + e.message + '</div>';
+            }
+        }
+
+        // 检查单个项目
+        async function checkProject(projectId) {
+            var userCode = localStorage.getItem('eam_user');
+            if (!userCode) {
+                showError('请先登录EAM系统');
+                return;
+            }
+            showLoading('正在检查SN匹配（使用账号：' + userCode + '）...');
+            try {
+                const resp = await fetch(SERVER_URL + '/api/check/' + projectId + '?user_code=' + encodeURIComponent(userCode));
+                const data = await resp.json();
+                if (data.ok) {
+                    showResult('检查完成', data);
+                    loadProjects();
+                    loadOverview();
+                } else {
+                    showError(data.error || '检查失败');
+                }
+            } catch (e) {
+                showError('检查失败：' + e.message);
+            }
+        }
+
+        // 批量检查
+        async function checkAllProjects() {
+            var userCode = localStorage.getItem('eam_user');
+            if (!userCode) {
+                showError('请先登录EAM系统');
+                return;
+            }
+            showLoading('批量检查中（使用账号：' + userCode + '），请稍候...');
+            try {
+                const resp = await fetch(SERVER_URL + '/api/check-all?user_code=' + encodeURIComponent(userCode));
+                const data = await resp.json();
+                if (data.ok) {
+                    showResult('批量检查完成', { checked: data.checked });
+                    loadProjects();
+                    loadOverview();
+                } else {
+                    showError(data.error || '检查失败');
+                }
+            } catch (e) {
+                showError('检查失败：' + e.message);
+            }
+        }
+
+        // 查看详情
+        async function viewDetail(projectId) {
+            window.open(SERVER_URL + '/sn-detail/' + projectId, '_blank');
+        }
+
+        // UI辅助函数
+        function showLoading(msg) {
+            document.getElementById('result-area').innerHTML = '<div class="card loading">' + msg + '</div>';
+        }
+        function showResult(title, data) {
+            let html = '<div class="card success"><h3>' + title + '</h3>';
+            if (data) {
+                html += '<div class="result-card">';
+                Object.keys(data).forEach(key => {
+                    if (key !== 'ok' && key !== 'missing_list' && key !== 'matched_list' && key !== 'extra_list') {
+                        html += '<div class="result-row"><span class="result-label">' + key + '</span><span class="result-value">' + data[key] + '</span></div>';
+                    }
+                });
+                if (data.missing_list && data.missing_list.length > 0) {
+                    html += '<div style="margin-top: 8px;"><strong>未匹配SN：</strong><br>';
+                    data.missing_list.forEach(sn => { html += '<span style="background:#ffebee;color:#c62828;padding:2px 8px;border-radius:4px;font-size:12px;margin:2px;display:inline-block;">' + sn + '</span>'; });
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+            html += '</div>';
+            document.getElementById('result-area').innerHTML = html;
+        }
+        function showError(msg) {
+            document.getElementById('result-area').innerHTML = '<div class="card error">' + msg + '</div>';
+        }
+        function toast(msg, type) {
+            var e = document.createElement('div');
+            e.style.cssText = 'position:fixed;top:20px;right:20px;padding:10px 18px;border-radius:8px;color:white;font-size:13px;z-index:1000;' + (type === 'success' ? 'background:#34c759' : 'background:#ff3b30');
+            e.textContent = msg;
+            document.body.appendChild(e);
+            setTimeout(function() { e.remove(); }, 3000);
+        }
+
+        // 初始化
+        initLoginStatus();
+        loadOverview();
+        loadProjects();
+    </script>
+</body>
+</html>

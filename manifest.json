@@ -1,0 +1,12 @@
+{
+  "id": "sn-admin-panel",
+  "name": "SN管理面板",
+  "version": "1.0.0",
+  "description": "SN匹配检查和数据管理插件",
+  "type": "bitable",
+  "permissions": [
+    "bitable:app",
+    "bitable:app:readonly"
+  ],
+  "entry": "src/index.html"
+}
