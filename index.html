@@ -379,11 +379,26 @@
         // 查询EAM
         async function queryEAM(userCode, projectCode) {
             try {
-                const resp = await fetch(`https://eam.asset.mioffice.cn/jxs/common?eventcode=query_data&funid=queryevent pagetype=grid&query_funid=proto_card_user&user_id=${userCode}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
-                    body: 'start=0&limit=50'
+                const params = new URLSearchParams({
+                    eventcode: 'query_data',
+                    funid: 'queryevent',
+                    pagetype: 'grid',
+                    query_funid: 'proto_card_user',
+                    user_id: userCode
                 });
+                const resp = await fetch(`https://eam.asset.mioffice.cn/jxs/common?${params.toString()}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: 'start=0&limit=50',
+                    credentials: 'include'
+                });
+                if (!resp.ok) {
+                    console.error('EAM查询失败:', resp.status);
+                    return [];
+                }
                 const data = await resp.json();
                 const items = (data.data && data.data.root) || [];
                 return items
