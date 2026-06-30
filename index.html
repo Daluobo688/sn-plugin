@@ -115,6 +115,10 @@
 
         // 自动检测表格
         async function detectTables() {
+            // 自动保存配置
+            var feishuToken = document.getElementById('feishu-token').value.trim();
+            if (feishuToken) localStorage.setItem('feishu_token', feishuToken);
+
             var tokenInput = document.getElementById('app-token').value.trim();
             // 从URL提取App Token
             var match = tokenInput.match(/\/base\/([A-Za-z0-9]+)/);
@@ -123,10 +127,11 @@
 
             config.app_token = tokenInput;
             document.getElementById('app-token').value = tokenInput;
+            localStorage.setItem('sn_config', JSON.stringify(config));
 
             try {
                 var feishuToken = await getFeishuToken();
-                if (!feishuToken) { toast('请先登录飞书获取Token', 'error'); return; }
+                if (!feishuToken) { toast('请先填写飞书Access Token', 'error'); return; }
 
                 var resp = await fetch('https://open.feishu.cn/open-apis/bitable/v1/apps/' + tokenInput + '/tables', {
                     headers: { 'Authorization': 'Bearer ' + feishuToken }
